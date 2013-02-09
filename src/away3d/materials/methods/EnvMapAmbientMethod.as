@@ -1,13 +1,11 @@
 package away3d.materials.methods
 {
 	import away3d.arcane;
-	import away3d.core.managers.CubeTexture3DProxy;
 	import away3d.core.managers.Stage3DProxy;
-	import away3d.materials.utils.CubeMap;
+	import away3d.materials.methods.MethodVO;
 	import away3d.materials.utils.ShaderRegisterCache;
 	import away3d.materials.utils.ShaderRegisterElement;
-
-	import flash.display3D.Context3D;
+	import away3d.textures.CubeTextureBase;
 
 	use namespace arcane;
 
@@ -17,88 +15,67 @@ package away3d.materials.methods
 	 */
 	public class EnvMapAmbientMethod extends BasicAmbientMethod
 	{
-		private var _cubeTexture : CubeTexture3DProxy;
-		private var _cubeMapIndex : int;
+		private var _cubeTexture : CubeTextureBase;
 
 		/**
 		 * Creates a new EnvMapDiffuseMethod object.
 		 * @param envMap The cube environment map to use for the diffuse lighting.
 		 */
-		public function EnvMapAmbientMethod(envMap : CubeMap)
+		public function EnvMapAmbientMethod(envMap : CubeTextureBase)
 		{
 			super();
-			_cubeTexture = new CubeTexture3DProxy();
-			_cubeTexture.cubeMap = envMap;
-			_needsNormals = true;
+			_cubeTexture = envMap;
 		}
 
-
-		arcane override function reset() : void
+		override arcane function initVO(vo : MethodVO) : void
 		{
-			super.reset();
-			_cubeMapIndex = -1;
+			super.initVO(vo);
+			vo.needsNormals = true;
 		}
 
 		/**
 		 * @inheritDoc
 		 */
-		override public function dispose(deep : Boolean) : void
+		override public function dispose() : void
 		{
-			_cubeTexture.dispose(deep);
 		}
 
 		/**
 		 * The cube environment map to use for the diffuse lighting.
 		 */
-		public function get envMap() : CubeMap
+		public function get envMap() : CubeTextureBase
 		{
-			return _cubeTexture.cubeMap;
+			return _cubeTexture;
 		}
 
-		public function set envMap(value : CubeMap) : void
+		public function set envMap(value : CubeTextureBase) : void
 		{
-			_cubeTexture.cubeMap = value;
-		}
-
-		/**
-		 * @inheritDoc
-		 */
-		arcane override function set numLights(value : int) : void
-		{
-			super.numLights = value;
-			_needsNormals = true;
+			_cubeTexture = value;
 		}
 
 		/**
 		 * @inheritDoc
 		 */
-		arcane override function activate(stage3DProxy : Stage3DProxy) : void
+		arcane override function activate(vo : MethodVO, stage3DProxy : Stage3DProxy) : void
 		{
-			super.activate(stage3DProxy);
+			super.activate(vo, stage3DProxy);
 
-			stage3DProxy.setTextureAt(_cubeMapIndex, _cubeTexture.getTextureForContext(stage3DProxy));
+			stage3DProxy.setTextureAt(vo.texturesIndex, _cubeTexture.getTextureForStage3D(stage3DProxy));
 		}
-
-//		arcane override function deactivate(stage3DProxy : Stage3DProxy) : void
-//		{
-//			super.deactivate(stage3DProxy);
-//
-//			stage3DProxy.setTextureAt(_cubeMapIndex, null);
-//		}
 
 		/**
 		 * @inheritDoc
 		 */
-		arcane override function getFragmentPostLightingCode(regCache : ShaderRegisterCache, targetReg : ShaderRegisterElement) : String
+		arcane override function getFragmentCode(vo : MethodVO, regCache : ShaderRegisterCache, targetReg : ShaderRegisterElement) : String
 		{
 			var code : String = "";
 			var cubeMapReg : ShaderRegisterElement = regCache.getFreeTextureReg();
-			_cubeMapIndex = cubeMapReg.index;
+			vo.texturesIndex = cubeMapReg.index;
 
 			code += "tex " + targetReg + ", " + _normalFragmentReg + ", " + cubeMapReg + " <cube,linear,miplinear,clamp>\n";
 
 			_ambientInputRegister = regCache.getFreeFragmentConstant();
-			_ambientInputIndex = _ambientInputRegister.index;
+			vo.fragmentConstantsIndex = _ambientInputRegister.index;
 
 			code += "add " + targetReg+".xyz, " + targetReg+".xyz, " + _ambientInputRegister+".xyz\n";
 

@@ -1,16 +1,9 @@
 package away3d.materials.methods
 {
 	import away3d.arcane;
-	import away3d.cameras.Camera3D;
-	import away3d.core.base.IRenderable;
-	import away3d.core.managers.Stage3DProxy;
-	import away3d.lights.LightBase;
+	import away3d.lights.DirectionalLight;
 	import away3d.materials.utils.ShaderRegisterCache;
 	import away3d.materials.utils.ShaderRegisterElement;
-
-	import flash.display3D.Context3D;
-	import flash.display3D.Context3DProgramType;
-	import flash.geom.Matrix3D;
 
 	use namespace arcane;
 
@@ -21,72 +14,81 @@ package away3d.materials.methods
 		 *
 		 * @param castingLight The light casting the shadow
 		 */
-		public function FilteredShadowMapMethod(castingLight : LightBase)
+		public function FilteredShadowMapMethod(castingLight : DirectionalLight)
 		{
 			super(castingLight);
-			_data[5] = .5;
-			_data[6] = castingLight.shadowMapper.depthMapSize;
-			_data[7] = 1/castingLight.shadowMapper.depthMapSize;
+		}
+
+		override arcane function initConstants(vo : MethodVO) : void
+		{
+			super.initConstants(vo);
+
+			var fragmentData : Vector.<Number> = vo.fragmentData;
+			var index : int = vo.fragmentConstantsIndex;
+			fragmentData[index+8] = .5;
+			fragmentData[index+9] = castingLight.shadowMapper.depthMapSize;
+			fragmentData[index+10] = 1/castingLight.shadowMapper.depthMapSize;
 		}
 
 		/**
 		 * @inheritDoc
 		 */
-		override arcane function getFragmentPostLightingCode(regCache : ShaderRegisterCache, targetReg : ShaderRegisterElement) : String
+		override protected function getPlanarFragmentCode(vo : MethodVO, regCache : ShaderRegisterCache, targetReg : ShaderRegisterElement) : String
 		{
 			var depthMapRegister : ShaderRegisterElement = regCache.getFreeTextureReg();
 			var decReg : ShaderRegisterElement = regCache.getFreeFragmentConstant();
 			var dataReg : ShaderRegisterElement = regCache.getFreeFragmentConstant();
+			var customDataReg : ShaderRegisterElement = regCache.getFreeFragmentConstant();
 			var depthCol : ShaderRegisterElement = regCache.getFreeFragmentVectorTemp();
 			var uvReg : ShaderRegisterElement;
 			var code : String = "";
-            _decIndex = decReg.index;
+			vo.fragmentConstantsIndex = decReg.index*4;
 
 			regCache.addFragmentTempUsages(depthCol, 1);
 
 			uvReg = regCache.getFreeFragmentVectorTemp();
 			regCache.addFragmentTempUsages(uvReg, 1);
 
-			code += "mov " + uvReg + ", " + _depthMapVar + "\n" +
+			code += "mov " + uvReg + ", " + _depthMapCoordReg + "\n" +
 
-					"tex " + depthCol + ", " + _depthMapVar + ", " + depthMapRegister + " <2d, nearest, clamp>\n" +
+					"tex " + depthCol + ", " + _depthMapCoordReg + ", " + depthMapRegister + " <2d, nearest, clamp>\n" +
 					"dp4 " + depthCol+".z, " + depthCol + ", " + decReg + "\n" +
 					"sub " + depthCol+".z, " + depthCol+".z, " + dataReg+".x\n" + 	// offset by epsilon
-					"slt " + uvReg+".z, " + _depthMapVar+".z, " + depthCol+".z\n" +   // 0 if in shadow
+					"slt " + uvReg+".z, " + _depthMapCoordReg+".z, " + depthCol+".z\n" +   // 0 if in shadow
 
-					"add " + uvReg+".x, " + _depthMapVar+".x, " + dataReg+".w\n" + 	// (1, 0)
+					"add " + uvReg+".x, " + _depthMapCoordReg+".x, " + customDataReg+".z\n" + 	// (1, 0)
 					"tex " + depthCol + ", " + uvReg + ", " + depthMapRegister + " <2d, nearest, clamp>\n" +
 					"dp4 " + depthCol+".z, " + depthCol + ", " + decReg + "\n" +
-					"sub " + depthCol+".z, " + depthCol+".z, " + dataReg+".x\n" +	// offset by epsilon
-					"slt " + uvReg+".w, " + _depthMapVar+".z, " + depthCol+".z\n" +   // 0 if in shadow
+					"sub " + depthCol+".z, " + depthCol + ".z, " + dataReg+".x\n" +	// offset by epsilon
+					"slt " + uvReg+".w, " + _depthMapCoordReg+".z, " + depthCol+".z\n" +   // 0 if in shadow
 
-					"div " + depthCol+".x, " + _depthMapVar+".x, " + dataReg+".w\n" +
+					"mul " + depthCol+".x, " + _depthMapCoordReg+".x, " + customDataReg+".y\n" +
 					"frc " + depthCol+".x, " + depthCol+".x\n" +
 					"sub " + uvReg+".w, " + uvReg+".w, " + uvReg+".z\n" +
 					"mul " + uvReg+".w, " + uvReg+".w, " + depthCol+".x\n" +
 					"add " + targetReg+".w, " + uvReg+".z, " + uvReg+".w\n" +
 
-					"mov " + uvReg+".x, " + _depthMapVar+".x\n" +
-					"add " + uvReg+".y, " + _depthMapVar+".y, " + dataReg+".w\n" +	// (0, 1)
+					"mov " + uvReg+".x, " + _depthMapCoordReg+".x\n" +
+					"add " + uvReg+".y, " + _depthMapCoordReg+".y, " + customDataReg+".z\n" +	// (0, 1)
 					"tex " + depthCol + ", " + uvReg + ", " + depthMapRegister + " <2d, nearest, clamp>\n" +
 					"dp4 " + depthCol+".z, " + depthCol + ", " + decReg + "\n" +
 					"sub " + depthCol+".z, " + depthCol+".z, " + dataReg+".x\n" +	// offset by epsilon
-					"slt " + uvReg+".z, " + _depthMapVar+".z, " + depthCol+".z\n" +   // 0 if in shadow
+					"slt " + uvReg+".z, " + _depthMapCoordReg+".z, " + depthCol+".z\n" +   // 0 if in shadow
 
-					"add " + uvReg+".x, " + _depthMapVar+".x, " + dataReg+".w\n" +	// (1, 1)
+					"add " + uvReg+".x, " + _depthMapCoordReg+".x, " + customDataReg+".z\n" +	// (1, 1)
 					"tex " + depthCol + ", " + uvReg + ", " + depthMapRegister + " <2d, nearest, clamp>\n" +
 					"dp4 " + depthCol+".z, " + depthCol + ", " + decReg + "\n" +
 					"sub " + depthCol+".z, " + depthCol+".z, " + dataReg+".x\n" +	// offset by epsilon
-					"slt " + uvReg+".w, " + _depthMapVar+".z, " + depthCol+".z\n" +   // 0 if in shadow
+					"slt " + uvReg+".w, " + _depthMapCoordReg+".z, " + depthCol+".z\n" +   // 0 if in shadow
 
 					// recalculate fraction, since we ran out of registers :(
-					"mul " + depthCol+".x, " + _depthMapVar+".x, " + dataReg+".z\n" +
+					"mul " + depthCol+".x, " + _depthMapCoordReg+".x, " + customDataReg+".y\n" +
 					"frc " + depthCol+".x, " + depthCol+".x\n" +
 					"sub " + uvReg+".w, " + uvReg+".w, " + uvReg+".z\n" +
 					"mul " + uvReg+".w, " + uvReg+".w, " + depthCol+".x\n" +
 					"add " + uvReg+".w, " + uvReg+".z, " + uvReg+".w\n" +
 
-					"mul " + depthCol+".x, " + _depthMapVar+".y, " + dataReg+".z\n" +
+					"mul " + depthCol+".x, " + _depthMapCoordReg+".y, " + customDataReg+".y\n" +
 					"frc " + depthCol+".x, " + depthCol+".x\n" +
 					"sub " + uvReg+".w, " + uvReg+".w, " + targetReg+".w\n" +
 					"mul " + uvReg+".w, " + uvReg+".w, " + depthCol+".x\n" +
@@ -95,7 +97,7 @@ package away3d.materials.methods
 			regCache.removeFragmentTempUsage(depthCol);
 			regCache.removeFragmentTempUsage(uvReg);
 
-			_depthMapIndex = depthMapRegister.index;
+			vo.texturesIndex = depthMapRegister.index;
 
 			return code;
 		}

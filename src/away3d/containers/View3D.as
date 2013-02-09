@@ -1,29 +1,38 @@
-package away3d.containers
+﻿package away3d.containers
 {
+	import flash.display.Sprite;
+	import flash.display3D.Context3D;
+	import flash.display3D.Context3DTextureFormat;
+	import flash.display3D.textures.Texture;
+	import flash.events.ContextMenuEvent;
+	import flash.events.Event;
+	import flash.geom.Point;
+	import flash.geom.Rectangle;
+	import flash.geom.Transform;
+	import flash.geom.Vector3D;
+	import flash.net.URLRequest;
+	import flash.net.navigateToURL;
+	import flash.ui.ContextMenu;
+	import flash.ui.ContextMenuItem;
+	import flash.utils.getTimer;
+	
+	import away3d.Away3D;
 	import away3d.arcane;
 	import away3d.cameras.Camera3D;
 	import away3d.core.managers.Mouse3DManager;
+	import away3d.core.managers.RTTBufferManager;
 	import away3d.core.managers.Stage3DManager;
 	import away3d.core.managers.Stage3DProxy;
+	import away3d.core.pick.IPicker;
 	import away3d.core.render.DefaultRenderer;
 	import away3d.core.render.DepthRenderer;
 	import away3d.core.render.Filter3DRenderer;
 	import away3d.core.render.RendererBase;
 	import away3d.core.traverse.EntityCollector;
-	import away3d.lights.LightBase;
-
-	import flash.display.BitmapData;
-
-	import flash.display.Sprite;
-	import flash.display3D.Context3D;
-	import flash.display3D.Context3DTextureFormat;
-	import flash.display3D.textures.Texture;
-	import flash.events.Event;
-	import flash.geom.Matrix3D;
-	import flash.geom.Point;
-	import flash.geom.Transform;
-	import flash.geom.Vector3D;
-	import flash.utils.getTimer;
+	import away3d.events.CameraEvent;
+	import away3d.events.Stage3DEvent;
+	import away3d.textures.Texture2DBase;
+	
 
 	use namespace arcane;
 
@@ -33,66 +42,159 @@ package away3d.containers
 		private var _height : Number = 0;
 		private var _localPos : Point = new Point();
 		private var _globalPos : Point = new Point();
-		private var _scene : Scene3D;
-		private var _camera : Camera3D;
-		private var _entityCollector : EntityCollector;
+		private var _globalPosDirty:Boolean;
+		protected var _scene : Scene3D;
+		protected var _camera : Camera3D;
+		protected var _entityCollector : EntityCollector;
 
-		private var _aspectRatio : Number;
+		protected var _aspectRatio : Number;
 		private var _time : Number = 0;
 		private var _deltaTime : uint;
 		private var _backgroundColor : uint = 0x000000;
 		private var _backgroundAlpha : Number = 1;
 
 		private var _mouse3DManager : Mouse3DManager;
-		private var _stage3DManager : Stage3DManager;
 
-		private var _renderer : RendererBase;
+		protected var _renderer : RendererBase;
 		private var _depthRenderer : DepthRenderer;
 		private var _addedToStage:Boolean;
+		
+		private var _forceSoftware : Boolean;
 
-		private var _filter3DRenderer : Filter3DRenderer;
-		private var _requireDepthRender : Boolean;
-		private var _depthRender : Texture;
-		private var _depthTextureWidth : int = -1;
-		private var _depthTextureHeight : int = -1;
+		protected var _filter3DRenderer : Filter3DRenderer;
+		protected var _requireDepthRender : Boolean;
+		protected var _depthRender : Texture;
 		private var _depthTextureInvalid : Boolean = true;
 
 		private var _hitField : Sprite;
-		private var _parentIsStage : Boolean;
+		protected var _parentIsStage : Boolean;
 
-		private var _backgroundImage : BitmapData;
-		private var _bgImageFitToViewPort:Boolean = true;
-		private var _stage3DProxy : Stage3DProxy;
-		private var _backBufferInvalid : Boolean = true;
+		private var _background : Texture2DBase;
+		protected var _stage3DProxy : Stage3DProxy;
+		protected var _backBufferInvalid : Boolean = true;
 		private var _antiAlias : uint;
 
-		public function View3D(scene : Scene3D = null, camera : Camera3D = null, renderer : DefaultRenderer = null)
+		protected var _rttBufferManager : RTTBufferManager;
+		
+		private var _rightClickMenuEnabled:Boolean = true;
+		private var _sourceURL:String;
+		private var _menu0:ContextMenuItem;
+		private var _menu1:ContextMenuItem;
+		private var _ViewContextMenu:ContextMenu;
+		private var _shareContext:Boolean = false;
+		private var _scissorRect:Rectangle;
+		private var _scissorRectDirty:Boolean = true;
+		private var _viewportDirty:Boolean = true;
+		
+		private function viewSource(e:ContextMenuEvent):void 
+		{
+			var request:URLRequest = new URLRequest(_sourceURL);
+			try {
+				navigateToURL(request, "_blank");
+			} catch (error:Error) {
+				
+			}
+		}
+		
+		private function visitWebsite(e:ContextMenuEvent):void 
+		{
+			var url:String = Away3D.WEBSITE_URL;
+			var request:URLRequest = new URLRequest(url);
+			try {
+				navigateToURL(request);
+			} catch (error:Error) {
+				
+			}
+		}
+		
+		private function initRightClickMenu():void
+		{
+			_menu0 = new ContextMenuItem("Away3D.com\tv" + Away3D.MAJOR_VERSION +"." + Away3D.MINOR_VERSION +"."+ Away3D.REVISION, true, true, true);
+			_menu1 = new ContextMenuItem("View Source", true, true, true); 
+			_menu0.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, visitWebsite);
+			_menu1.addEventListener(ContextMenuEvent.MENU_ITEM_SELECT, viewSource);
+			_ViewContextMenu = new ContextMenu();
+			
+			updateRightClickMenu();
+		}
+		
+		private function updateRightClickMenu():void
+		{
+			if (_rightClickMenuEnabled)
+				_ViewContextMenu.customItems = _sourceURL? [_menu0, _menu1] : [_menu0];
+			else
+				_ViewContextMenu.customItems = [];
+			
+			contextMenu = _ViewContextMenu;
+		}
+		
+		
+		public function View3D(scene : Scene3D = null, camera : Camera3D = null, renderer : RendererBase = null, forceSoftware:Boolean = false)
 		{
 			super();
 
 			_scene = scene || new Scene3D();
 			_camera = camera || new Camera3D();
 			_renderer = renderer || new DefaultRenderer();
-			_mouse3DManager = new Mouse3DManager(this);
 			_depthRenderer = new DepthRenderer();
-			_entityCollector = new EntityCollector();
+			_forceSoftware = forceSoftware;
 			
+			// todo: entity collector should be defined by renderer
+			_entityCollector = _renderer.createEntityCollector();
+
+			_scissorRect = new Rectangle();
+
 			initHitField();
+			
+			_mouse3DManager = new Mouse3DManager();
+			_mouse3DManager.enableMouseListeners(this);
 			
 			addEventListener(Event.ADDED_TO_STAGE, onAddedToStage, false, 0, true);
 			addEventListener(Event.ADDED, onAdded, false, 0, true);
 			
+			
+			_camera.addEventListener(CameraEvent.LENS_CHANGED, onLensChanged);
+			
 			_camera.partition = _scene.partition;
+			
+			initRightClickMenu();
 		}
-
+		
+		public function get rightClickMenuEnabled() : Boolean
+		{
+			return _rightClickMenuEnabled;
+		}
+		
+		public function set rightClickMenuEnabled(val:Boolean) : void
+		{
+			_rightClickMenuEnabled = val;
+			
+			updateRightClickMenu();
+		}
+		
 		public function get stage3DProxy() : Stage3DProxy
 		{
 			return _stage3DProxy;
 		}
 
+		public function set stage3DProxy(stage3DProxy:Stage3DProxy) : void
+		{
+			if (_stage3DProxy)
+				_stage3DProxy.removeEventListener(Stage3DEvent.VIEWPORT_UPDATED, onViewportUpdated);
+			
+			_stage3DProxy = stage3DProxy;
+			
+			_stage3DProxy.addEventListener(Stage3DEvent.VIEWPORT_UPDATED, onViewportUpdated);
+			
+			_renderer.stage3DProxy = _depthRenderer.stage3DProxy = _stage3DProxy;
+			
+			_globalPosDirty = true;
+			_backBufferInvalid = true;
+		}
+
 		/**
 		 * Forces mouse-move related events even when the mouse hasn't moved. This allows mouseOver and mouseOut events
-		 * etc to be triggered due to changes in the scene graph.
+		 * etc to be triggered due to changes in the scene graph. Defaults to false.
 		 */
 		public function get forceMouseMove() : Boolean
 		{
@@ -104,28 +206,15 @@ package away3d.containers
 			_mouse3DManager.forceMouseMove = value;
 		}
 
-		public function get backgroundImage() : BitmapData
+		public function get background() : Texture2DBase
 		{
-			return _backgroundImage;
+			return _background;
 		}
 
-		public function set backgroundImageFitToViewPort(value:Boolean):void
+		public function set background(value : Texture2DBase) : void
 		{
-			_bgImageFitToViewPort = value;
-
-			if(_renderer.backgroundImageRenderer == null)
-				return;
-
-			_renderer.backgroundImageRenderer.fitToViewPort = value;
-		}
-
-		public function set backgroundImage(value : BitmapData) : void
-		{
-			_backgroundImage = value;
-			_renderer.backgroundImage = _backgroundImage;
-			_renderer.backgroundImageRenderer.viewWidth = _width;
-			_renderer.backgroundImageRenderer.viewHeight = _height;
-			_renderer.backgroundImageRenderer.fitToViewPort = _bgImageFitToViewPort;
+			_background = value;
+			_renderer.background = _background;
 		}
 
 		private function initHitField() : void
@@ -170,7 +259,7 @@ package away3d.containers
 				_filter3DRenderer.dispose();
 				_filter3DRenderer = null;
 			} else if (!_filter3DRenderer && value) {
-				_filter3DRenderer = new Filter3DRenderer(_width, _height);
+				_filter3DRenderer = new Filter3DRenderer(stage3DProxy);
 				_filter3DRenderer.filters = value;
 			}
 
@@ -198,18 +287,16 @@ package away3d.containers
 		{
 			_renderer.dispose();
 			_renderer = value;
+			_entityCollector = _renderer.createEntityCollector();
 			_renderer.stage3DProxy = _stage3DProxy;
+			_renderer.antiAlias = _antiAlias;
 			_renderer.backgroundR = ((_backgroundColor >> 16) & 0xff) / 0xff;
 			_renderer.backgroundG = ((_backgroundColor >> 8) & 0xff) / 0xff;
 			_renderer.backgroundB = (_backgroundColor & 0xff) / 0xff;
 			_renderer.backgroundAlpha = _backgroundAlpha;
-			_renderer.backgroundImage = _backgroundImage;
-			
-			invalidateBackBuffer();
-		}
+			_renderer.viewWidth = _width;
+			_renderer.viewHeight = _height;
 
-		private function invalidateBackBuffer() : void
-		{
 			_backBufferInvalid = true;
 		}
 
@@ -258,10 +345,17 @@ package away3d.containers
 		 */
 		public function set camera(camera:Camera3D) : void
 		{
+			_camera.removeEventListener(CameraEvent.LENS_CHANGED, onLensChanged);
+			
 			_camera = camera;
 			
 			if (_scene)
 				_camera.partition = _scene.partition;
+			
+			_camera.addEventListener(CameraEvent.LENS_CHANGED, onLensChanged);
+			
+			_scissorRectDirty = true;
+			_viewportDirty = true;
 		}
 		
 		/**
@@ -293,7 +387,8 @@ package away3d.containers
 		}
 
 		/**
-		 * The width of the viewport
+		 * The width of the viewport. When software rendering is used, this is limited by the
+		 * platform to 2048 pixels.
 		 */
 		override public function get width() : Number
 		{
@@ -302,27 +397,32 @@ package away3d.containers
 
 		override public function set width(value : Number) : void
 		{
+			// Backbuffer limitation in software mode. See comment in updateBackBuffer()
+			if (_stage3DProxy && _stage3DProxy.usesSoftwareRendering && value > 2048)
+				value = 2048;
+				
 			if (_width == value)
 				return;
-			
+
+			if (_rttBufferManager)
+				_rttBufferManager.viewWidth = value;
+
 			_hitField.width = value;
 			_width = value;
 			_aspectRatio = _width/_height;
 			_depthTextureInvalid = true;
+
+			_renderer.viewWidth = value;
 			
-			if (_filter3DRenderer)
-				_filter3DRenderer.viewWidth = value;
+			_scissorRect.width = value;
 			
-			if (_renderer.backgroundImageRenderer != null) {
-				_renderer.backgroundImageRenderer.viewWidth = _width;
-				_renderer.backgroundImageRenderer.viewHeight = _height;
-			}
-			
-			invalidateBackBuffer();
+			_backBufferInvalid = true;
+			_scissorRectDirty = true;
 		}
 
 		/**
-		 * The height of the viewport
+		 * The height of the viewport. When software rendering is used, this is limited by the
+		 * platform to 2048 pixels.
 		 */
 		override public function get height() : Number
 		{
@@ -331,41 +431,58 @@ package away3d.containers
 
 		override public function set height(value : Number) : void
 		{
+			// Backbuffer limitation in software mode. See comment in updateBackBuffer()
+			if (_stage3DProxy && _stage3DProxy.usesSoftwareRendering && value > 2048)
+				value = 2048;
+				
 			if (_height == value)
 				return;
-			
+
+			if (_rttBufferManager)
+				_rttBufferManager.viewHeight = value;
+
 			_hitField.height = value;
 			_height = value;
 			_aspectRatio = _width/_height;
 			_depthTextureInvalid = true;
+
+			_renderer.viewHeight = value;
+
+			_scissorRect.height = value;
 			
-			if (_filter3DRenderer)
-				_filter3DRenderer.viewHeight = value;
-			
-			invalidateBackBuffer();
+			_backBufferInvalid = true;
+			_scissorRectDirty = true;
 		}
 
 
 		override public function set x(value : Number) : void
 		{
-			super.x = value;
+			if (x == value)
+				return;
 			
-			_localPos.x = value;
+			_localPos.x = super.x = value;
+			
 			_globalPos.x = parent? parent.localToGlobal(_localPos).x : value;
-			
-			if (_stage3DProxy)
-				_stage3DProxy.x = _globalPos.x;
+			_globalPosDirty = true;
 		}
 
 		override public function set y(value : Number) : void
 		{
-			super.y = value;
+			if (y == value)
+				return;
 			
-			_localPos.y = value;
+			_localPos.y = super.y = value;
+			
 			_globalPos.y = parent? parent.localToGlobal(_localPos).y : value;
+			_globalPosDirty = true;
+		}
+		
+		override public function set visible(value : Boolean) : void
+		{
+			super.visible = value;
 			
-			if (_stage3DProxy)
-				_stage3DProxy.y = _globalPos.y;
+			if (_stage3DProxy && !_shareContext)
+				_stage3DProxy.visible = value;
 		}
 
 		/**
@@ -379,8 +496,9 @@ package away3d.containers
 		public function set antiAlias(value : uint) : void
 		{
 			_antiAlias = value;
+			_renderer.antiAlias = value;
 			
-			invalidateBackBuffer();
+			_backBufferInvalid = true;
 		}
 		
 		/**
@@ -392,13 +510,69 @@ package away3d.containers
 		}
 
 		/**
+		 * Defers control of Context3D clear() and present() calls to Stage3DProxy, enabling multiple Stage3D frameworks
+		 * to share the same Context3D object.
+		 */
+		public function get shareContext() : Boolean
+		{
+			return _shareContext;
+		}
+
+		public function set shareContext(value : Boolean) : void
+		{
+			if (_shareContext == value)
+				return;
+			
+			_shareContext = value;
+			_globalPosDirty = true;
+		}
+
+		/**
 		 * Updates the backbuffer dimensions.
 		 */
-		private function updateBackBuffer() : void
+		protected function updateBackBuffer() : void
 		{
-			_stage3DProxy.configureBackBuffer(_width, _height, _antiAlias, true);
+			// No reason trying to configure back buffer if there is no context available.
+			// Doing this anyway (and relying on _stage3DProxy to cache width/height for 
+			// context does get available) means usesSoftwareRendering won't be reliable.
+			if (_stage3DProxy.context3D && !_shareContext) {
+				if( _width && _height ){
+					// Backbuffers are limited to 2048x2048 in software mode and
+					// trying to configure the backbuffer to be bigger than that
+					// will throw an error. Capping the value is a graceful way of
+					// avoiding runtime exceptions for developers who are unable
+					// to test their Away3D implementation on screens that are 
+					// large enough for this error to ever occur.
+					if (_stage3DProxy.usesSoftwareRendering) {
+						// Even though these checks where already made in the width
+						// and height setters, at that point we couldn't be sure that
+						// the context had even been retrieved and the software flag
+						// thus be reliable. Make checks again.
+						if (_width > 2048) _width = 2048;
+						if (_height > 2048) _height = 2048;
+					}
+					
+					_stage3DProxy.configureBackBuffer(_width, _height, _antiAlias, true);
+					_backBufferInvalid = false;
+				} else {
+					width = stage.stageWidth;
+					height = stage.stageHeight;
+				}
+			}
+		}
+		
+		/**
+		 * Defines a source url string that can be accessed though a View Source option in the right-click menu.
+		 * 
+		 * Requires the stats panel to be enabled.
+		 * 
+		 * @param	url		The url to the source files.
+		 */
+		public function addSourceURL(url:String):void
+		{
+			_sourceURL = url;
 			
-			_backBufferInvalid = false;
+			updateRightClickMenu();
 		}
 		
 		/**
@@ -406,39 +580,58 @@ package away3d.containers
 		 */
 		public function render() : void
 		{
+			//if context3D has Disposed by the OS,don't render at this frame
+			if (!stage3DProxy.recoverFromDisposal()) {
+				_backBufferInvalid = true;
+				return;
+			}
+			
 			// reset or update render settings
 			if (_backBufferInvalid)
 				updateBackBuffer();
+				
+			if (!_parentIsStage) {
+				var globalPos : Point = parent.localToGlobal(_localPos);
+				if (_globalPos.x != globalPos.x || _globalPos.y != globalPos.y) {
+					_globalPos = globalPos;
+					_globalPosDirty = true;
+				}
+			}
 			
-			if (!_parentIsStage)
+			if (_globalPosDirty)
 				updateGlobalPos();
-			
+
 			updateTime();
-			
+
 			_entityCollector.clear();
-			
-			updateCamera();
+
+			updateViewSizeData();
 
 			// collect stuff to render
 			_scene.traversePartitions(_entityCollector);
 
-			// render things
-			if (_entityCollector.numMouseEnableds > 0)
-				_mouse3DManager.updateHitData();
+			// update picking
+			_mouse3DManager.updateCollider(this);
 
-			updateLights(_entityCollector);
+//			updateLights(_entityCollector);
 
 			if (_requireDepthRender)
 				renderSceneDepth(_entityCollector);
 
 			if (_filter3DRenderer && _stage3DProxy._context3D) {
-				_renderer.render(_entityCollector, _filter3DRenderer.getMainInputTexture(_stage3DProxy), _filter3DRenderer.renderRect);
+				_renderer.render(_entityCollector, _filter3DRenderer.getMainInputTexture(_stage3DProxy), _rttBufferManager.renderToTextureRect);
 				_filter3DRenderer.render(_stage3DProxy, camera, _depthRender);
-				_stage3DProxy._context3D.present();
+				if (!_shareContext) _stage3DProxy._context3D.present();
 			} else {
-				_renderer.render(_entityCollector);
+				_renderer.shareContext = _shareContext;
+				if (_shareContext) {
+					_renderer.render(_entityCollector, null, _scissorRect);
+				} else {
+					_renderer.render(_entityCollector);
+				}
+				
 			}
-			
+
 			// clean up data for this render
 			_entityCollector.cleanUp();
 
@@ -446,15 +639,27 @@ package away3d.containers
 			_mouse3DManager.fireMouseEvents();
 		}
 
-		private function updateGlobalPos() : void
+		protected function updateGlobalPos() : void
 		{
-			var globalPos : Point = parent.localToGlobal(_localPos);
-			if (_globalPos.x != globalPos.x) _stage3DProxy.x = globalPos.x;
-			if (_globalPos.y != globalPos.y) _stage3DProxy.y = globalPos.y;
-			_globalPos = globalPos;
+			_globalPosDirty = false;
+			
+			if (!_stage3DProxy)
+				return;
+			
+			if (_shareContext) {
+				_scissorRect.x = _globalPos.x - _stage3DProxy.x;
+				_scissorRect.y = _globalPos.y - _stage3DProxy.y;
+			} else {
+				_scissorRect.x = 0;
+				_scissorRect.y = 0;
+				_stage3DProxy.x = _globalPos.x;
+				_stage3DProxy.y = _globalPos.y;
+			}
+			
+			_scissorRectDirty = true;
 		}
 
-		private function updateTime() : void
+		protected function updateTime() : void
 		{
 			var time : Number = getTimer();
 			if (_time == 0) _time = time;
@@ -462,67 +667,47 @@ package away3d.containers
 			_time = time;
 		}
 
-		private function updateCamera() : void
+		private function updateViewSizeData() : void
 		{
 			_camera.lens.aspectRatio = _aspectRatio;
+			
+			if (_scissorRectDirty) {
+				_scissorRectDirty = false;
+				_camera.lens.updateScissorRect(_scissorRect.x, _scissorRect.y, _scissorRect.width, _scissorRect.height);
+			}
+			
+			if (_viewportDirty) {
+				_viewportDirty = false;
+				_camera.lens.updateViewport(_stage3DProxy.viewPort.x, _stage3DProxy.viewPort.y, _stage3DProxy.viewPort.width, _stage3DProxy.viewPort.height);
+			}
+			
 			_entityCollector.camera = _camera;
 
-			if (_filter3DRenderer) {
-				_camera.textureRatioX = _width/_filter3DRenderer.textureWidth;
-				_camera.textureRatioY = _height/_filter3DRenderer.textureHeight;
+			if (_filter3DRenderer || _renderer.renderToTexture) {
+				_renderer.textureRatioX = _rttBufferManager.textureRatioX;
+				_renderer.textureRatioY = _rttBufferManager.textureRatioY;
 			}
 			else {
-				_camera.textureRatioX = 1;
-				_camera.textureRatioY = 1;
+				_renderer.textureRatioX = 1;
+				_renderer.textureRatioY = 1;
 			}
 		}
 		
-		private function renderSceneDepth(entityCollector : EntityCollector) : void
+		protected function renderSceneDepth(entityCollector : EntityCollector) : void
 		{
 			if (_depthTextureInvalid || !_depthRender) initDepthTexture(_stage3DProxy._context3D);
+			_depthRenderer.textureRatioX = _rttBufferManager.textureRatioX;
+			_depthRenderer.textureRatioY = _rttBufferManager.textureRatioY;
 			_depthRenderer.render(entityCollector, _depthRender);
 		}
 
 		private function initDepthTexture(context : Context3D) : void
 		{
-			var w : int = getPowerOf2Exceeding(_width);
-			var h : int = getPowerOf2Exceeding(_height);
-
 			_depthTextureInvalid = false;
-
-			if (w == _depthTextureWidth && h == _depthTextureHeight) return;
-
-			_depthTextureWidth = w;
-			_depthTextureHeight = h;
 
 			if (_depthRender) _depthRender.dispose();
 
-			_depthRender = context.createTexture(w, h, Context3DTextureFormat.BGRA, true);
-		}
-
-		private function getPowerOf2Exceeding(value : int) : Number
-		{
-			var p : int = 1;
-
-			while (p < value && p < 2048)
-				p <<= 1;
-
-			if (p > 2048) p = 2048;
-
-			return p;
-		}
-
-		private function updateLights(entityCollector : EntityCollector) : void
-		{
-			var lights : Vector.<LightBase> = entityCollector.lights;
-			var len : uint = lights.length;
-			var light : LightBase;
-
-			for (var i : int = 0; i < len; ++i) {
-				light = lights[i];
-				if (light.castsShadows)
-					light.shadowMapper.renderDepthMap(_renderer.stage3DProxy, entityCollector, _depthRenderer);
-			}
+			_depthRender = context.createTexture(_rttBufferManager.textureWidth, _rttBufferManager.textureHeight, Context3DTextureFormat.BGRA, true);
 		}
 
 		/**
@@ -532,25 +717,66 @@ package away3d.containers
 		{
 			_stage3DProxy.dispose();
 			_renderer.dispose();
-			_mouse3DManager.dispose();
-			if (_depthRenderer) _depthRenderer.dispose();
-			_mouse3DManager.dispose();
-			if (_depthRender) _depthRender.dispose();
+			
+			if (_depthRender)
+				_depthRender.dispose();
+			
+			if (_rttBufferManager)
+				_rttBufferManager.dispose();
+			
+			_mouse3DManager.disableMouseListeners(this);
+			
+			_rttBufferManager = null;
+			_depthRender = null;
+			_mouse3DManager = null;
+			_depthRenderer = null;
+			_stage3DProxy = null;
+			_renderer = null;
+			_entityCollector = null;
 		}
 
-		public function project(point3d : Vector3D) : Point
+		public function project(point3d : Vector3D) : Vector3D
 		{
-			var p : Point = _camera.project(point3d);
+			var v : Vector3D = _camera.project(point3d);
 
-			p.x = (p.x + 1.0)*_width/2.0;
-			p.y = (p.y + 1.0)*_height/2.0;
+			v.x = (v.x + 1.0)*_width/2.0;
+			v.y = (v.y + 1.0)*_height/2.0;
 
-			return p;
+			return v;
 		}
 
-		public function unproject(mX : Number, mY : Number) : Vector3D
+		/**
+		 * Calculates the scene position of the given screen coordinates.
+		 * @param mX The x coordinate relative to the View3D.
+		 * @param mY The y coordinate relative to the View3D.
+		 * @param mZ The z coordinate relative to the View3D.
+		 * @return The scene position of the given screen coordinates. The returned point corresponds to a point on the projection plane.
+		 */
+		public function unproject(mX : Number, mY : Number, mZ : Number = 0) : Vector3D
 		{
-			return _camera.unproject((mX * 2 - _width)/_width, (mY * 2 - _height)/_height );
+			return _camera.unproject((mX * 2 - _width)/_width, (mY * 2 - _height)/_height, mZ);
+		}
+
+		/**
+		 * Returns the ray in scene space from the camera to the point on the screen.
+		 * @param mX The x coordinate relative to the View3D.
+		 * @param mY The y coordinate relative to the View3D.
+		 * @param mZ The z coordinate relative to the View3D.
+		 * @return The ray from the camera to the scene space position of a point on the projection plane.
+		 */
+		public function getRay(mX : Number, mY : Number, mZ : Number = 0) : Vector3D
+		{
+			return _camera.getRay((mX * 2 - _width)/_width, (mY * 2 - _height)/_height, mZ);
+		}
+		
+		public function get mousePicker() : IPicker
+		{
+			return _mouse3DManager.mousePicker;
+		}
+		
+		public function set mousePicker(value : IPicker) : void
+		{
+			_mouse3DManager.mousePicker = value;
 		}
 
 		/**
@@ -563,7 +789,13 @@ package away3d.containers
 		{
 			return _entityCollector;
 		}
-
+		
+		private function onLensChanged(event : CameraEvent) : void
+		{
+			_scissorRectDirty = true;
+			_viewportDirty = true;
+		}
+		
 		/**
 		 * When added to the stage, retrieve a Stage3D instance
 		 */
@@ -573,29 +805,46 @@ package away3d.containers
 				return;
 			
 			_addedToStage = true;
-
-			_stage3DManager = Stage3DManager.getInstance(stage);
-
+			
+			if (!_stage3DProxy) {
+				_stage3DProxy = Stage3DManager.getInstance(stage).getFreeStage3DProxy(_forceSoftware);
+				_stage3DProxy.addEventListener(Stage3DEvent.VIEWPORT_UPDATED, onViewportUpdated);
+				
+			}
+			
+			_globalPosDirty = true;
+			
+			_rttBufferManager = RTTBufferManager.getInstance(_stage3DProxy);
+			
+			_renderer.stage3DProxy = _depthRenderer.stage3DProxy = _stage3DProxy;
+			
+			//default wiidth/height to stageWidth/stageHeight
 			if (_width == 0) width = stage.stageWidth;
+			else _rttBufferManager.viewWidth = _width;
 			if (_height == 0) height = stage.stageHeight;
-
-			_stage3DProxy = _stage3DManager.getFreeStage3DProxy();
-			_stage3DProxy.x = _globalPos.x;
-			_stage3DProxy.y = _globalPos.y;
-			_renderer.stage3DProxy = _depthRenderer.stage3DProxy = _mouse3DManager.stage3DProxy = _stage3DProxy;
+			else _rttBufferManager.viewHeight = _height;
 		}
 
 		private function onAdded(event : Event) : void
 		{
 			_parentIsStage = (parent == stage);
-			_globalPos = parent.localToGlobal(new Point(x, y));
-			if (_stage3DProxy) {
-				_stage3DProxy.x = _globalPos.x;
-				_stage3DProxy.y = _globalPos.y;
+			
+			_globalPos = parent.localToGlobal(_localPos);
+			_globalPosDirty = true;
+		}
+		
+		private function onViewportUpdated(event : Stage3DEvent) : void
+		{
+			if (_shareContext) {
+				_scissorRect.x = _globalPos.x - _stage3DProxy.x;
+				_scissorRect.y = _globalPos.y - _stage3DProxy.y;
+				_scissorRectDirty = true;
 			}
+			
+			_viewportDirty = true;
 		}
 
-		// dead ends:
+// dead ends:
 		override public function set z(value : Number) : void {}
 		override public function set scaleZ(value : Number) : void {}
 		override public function set rotation(value : Number) : void {}

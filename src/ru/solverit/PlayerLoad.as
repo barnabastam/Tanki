@@ -44,10 +44,10 @@ package ru.solverit
 		private function onResourceComplete(e:Event):void 
 		{
 			// получаем нашу загруженную модель
-			main.player = ObjectContainer3D(e.target);
+			//player = ObjectContainer3D(e.target);
 			
 			// добавляем модель на сцену
-			view.scene.addChild( main.player );			
+			//view.scene.addChild( main.player );			
 		}
 		
 	}

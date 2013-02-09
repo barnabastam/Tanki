@@ -10,14 +10,12 @@ package away3d.tools.utils
 		{
 			if (bitmapData == null) return true;
 
-			var w : int = bitmapData.width;
-			var h : int = bitmapData.height;
+			return isDimensionValid(bitmapData.width) && isDimensionValid(bitmapData.height);
+		}
 
-			if (w < 2 || h < 2 || w > MAX_SIZE || h > MAX_SIZE) return false;
-
-			if (isPowerOfTwo(w) && isPowerOfTwo(h)) return true;
-
-			return false;
+		public static function isDimensionValid(d : uint) : Boolean
+		{
+			return d >= 1 && d <= MAX_SIZE && isPowerOfTwo(d);
 		}
 
 		public static function isPowerOfTwo(value : int) : Boolean
@@ -25,14 +23,14 @@ package away3d.tools.utils
 			return value ? ((value & -value) == value) : false;
 		}
 
-		public static function getBestPowerOf2(value : int) : Number
+		public static function getBestPowerOf2(value : uint) : Number
 		{
-			var p : int = 1;
+			var p : uint = 1;
 
 			while (p < value)
 				p <<= 1;
 
-			if (p > 2048) p = 2048;
+			if (p > MAX_SIZE) p = MAX_SIZE;
 
 			return p;
 		}

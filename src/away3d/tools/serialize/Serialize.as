@@ -1,12 +1,11 @@
 package away3d.tools.serialize
 {
-	import away3d.animators.data.AnimationBase;
-	import away3d.animators.data.AnimationStateBase;
-	import away3d.animators.data.SkeletonAnimationSequence;
-	import away3d.animators.skeleton.JointPose;
-	import away3d.animators.skeleton.Skeleton;
-	import away3d.animators.skeleton.SkeletonJoint;
-	import away3d.animators.skeleton.SkeletonPose;
+	import away3d.animators.SkeletonAnimationState;
+	import away3d.animators.IAnimator;
+	import away3d.animators.data.JointPose;
+	import away3d.animators.data.Skeleton;
+	import away3d.animators.data.SkeletonJoint;
+	import away3d.animators.data.SkeletonPose;
 	import away3d.arcane;
 	import away3d.containers.ObjectContainer3D;
 	import away3d.containers.Scene3D;
@@ -15,8 +14,9 @@ package away3d.tools.serialize
 	import away3d.core.base.SubMesh;
 	import away3d.entities.Mesh;
 	import away3d.materials.MaterialBase;
-
+	import away3d.materials.lightpickers.StaticLightPicker;
 	import flash.utils.getQualifiedClassName;
+
 
 	use namespace arcane;
 	
@@ -51,12 +51,11 @@ package away3d.tools.serialize
 		public static function serializeMesh(mesh:Mesh, serializer:SerializerBase):void
 		{
 			serializeObjectContainerInternal(mesh as ObjectContainer3D, serializer, false /* serializeChildrenAndEnd */);
-			serializer.writeBoolean("mouseDetails", mesh.mouseDetails);
 			serializer.writeBoolean("castsShadows", mesh.castsShadows);
 			
-			if (mesh.animationState)
+			if (mesh.animator)
 			{
-				serializeAnimationState(mesh.animationState, serializer);
+				serializeAnimationState(mesh.animator, serializer);
 			}
 			
 			if (mesh.material)
@@ -75,16 +74,16 @@ package away3d.tools.serialize
 			serializer.endObject();
 		}
 		
-		public static function serializeAnimationState(animationState:AnimationStateBase, serializer:SerializerBase):void
+		public static function serializeAnimationState(animator:IAnimator, serializer:SerializerBase):void
 		{
-			serializer.beginObject(classNameFromInstance(animationState), null);
-			serializeAnimation(animationState.animation, serializer);
+			serializer.beginObject(classNameFromInstance(animator), null);
+			serializeAnimator(animator, serializer);
 			serializer.endObject();
 		}
 		
-		public static function serializeAnimation(animation:AnimationBase, serializer:SerializerBase):void
+		public static function serializeAnimator(animator:IAnimator, serializer:SerializerBase):void
 		{
-			serializer.beginObject(classNameFromInstance(animation), null);
+			serializer.beginObject(classNameFromInstance(animator), null);
 			serializer.endObject();
 		}
 		
@@ -105,7 +104,10 @@ package away3d.tools.serialize
 		public static function serializeMaterial(material:MaterialBase, serializer:SerializerBase):void
 		{
 			serializer.beginObject(classNameFromInstance(material), material.name);
-			serializer.writeString("lights", String(material.lights));
+
+			if (material.lightPicker is StaticLightPicker) {
+				serializer.writeString("lights", String(StaticLightPicker(material.lightPicker).lights));
+			}
 			serializer.writeBoolean("mipmap", material.mipmap);
 			serializer.writeBoolean("smooth", material.smooth);
 			serializer.writeBoolean("repeat", material.repeat);
@@ -135,11 +137,11 @@ package away3d.tools.serialize
 			{
 				if (skinnedSubGeometry.jointWeightsData)
 				{
-					serializer.writeUint("numJointWeights", skinnedSubGeometry.jointWeightsData.length)
+					serializer.writeUint("numJointWeights", skinnedSubGeometry.jointWeightsData.length);
 				}
 				if (skinnedSubGeometry.jointIndexData)
 				{
-					serializer.writeUint("numJointIndexes", skinnedSubGeometry.jointIndexData.length)
+					serializer.writeUint("numJointIndexes", skinnedSubGeometry.jointIndexData.length);
 				}
 			}
 			serializer.endObject();
@@ -182,16 +184,10 @@ package away3d.tools.serialize
 			serializer.endObject();
 		}
 		
-		public static function serializeSkeletonAnimationSequence(skeletonAnimationSequence:SkeletonAnimationSequence, serializer:SerializerBase):void
+		public static function serializeSkeletonAnimationState(skeletonAnimationState:SkeletonAnimationState, serializer:SerializerBase):void
 		{
-			serializer.beginObject(classNameFromInstance(skeletonAnimationSequence), skeletonAnimationSequence.name);
-			serializer.writeUint("duration", skeletonAnimationSequence.duration);
-			serializer.writeBoolean("fixedFrameRate", skeletonAnimationSequence.fixedFrameRate);
-			serializer.writeBoolean("looping", skeletonAnimationSequence.looping);
-			for each (var skeletonPose:SkeletonPose in skeletonAnimationSequence._frames)
-			{
-				serializeSkeletonPose(skeletonPose, serializer);
-			}
+			serializer.beginObject(classNameFromInstance(skeletonAnimationState), skeletonAnimationState.name);
+			//TODO: add animation nodes to serialiser
 			serializer.endObject();
 		}
 		
@@ -207,7 +203,7 @@ package away3d.tools.serialize
 		
 		private static function classNameFromInstance(instance:*):String
 		{
-			return getQualifiedClassName(instance).split("::").pop()
+			return getQualifiedClassName(instance).split("::").pop();
 		}
 		
 		private static function serializeObjectContainerInternal(objectContainer:ObjectContainer3D, serializer:SerializerBase, serializeChildrenAndEnd:Boolean):void

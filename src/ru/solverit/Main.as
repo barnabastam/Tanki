@@ -1,19 +1,23 @@
 package ru.solverit
 {
-	import away3d.containers.ObjectContainer3D;
-	import away3d.containers.View3D;
-	import away3d.core.base.Object3D;
-	import away3d.debug.AwayStats;
-	import away3d.entities.Mesh;
-	import away3d.lights.PointLight;
-	import away3d.materials.BitmapMaterial;
-	import away3d.primitives.Cube;
+	import alternativa.gui.layout.LayoutManager;
+	import alternativa.gui.mouse.CursorManager;
+	import alternativa.gui.mouse.MouseManager;
+	import alternativa.gui.theme.defaulttheme.init.DefaultTheme;
+	import alternativa.gui.theme.defaulttheme.primitives.base.Hint;
+	import alternativa.gui.theme.defaulttheme.skin.Cursors;
+	import alternativa.init.GUI;
 	
-	import flash.display.BitmapData;
-	import flash.display.BitmapDataChannel;
 	import flash.display.Sprite;
+	import flash.display.StageAlign;
+	import flash.display.StageScaleMode;
 	import flash.events.Event;
+	import flash.ui.Multitouch;
+	import flash.ui.MultitouchInputMode;
 
+	import ru.solverit.GUI.ContainerLogin;
+	import ru.solverit.GUI.ContainerGame;
+	
 	/**
 	 * ...
 	 * @author Solverit
@@ -21,15 +25,19 @@ package ru.solverit
 	[Frame(factoryClass="ru.solverit.Preloader")]
 	public class Main extends Sprite 
 	{
-		// Это наша сцена
-		private var view : View3D;
+		// -----
+		private var objectContainer: Sprite;
+		private var hintContainer:	 Sprite;
 		
-		// Это солнце
-		public  var light: PointLight;
 		
-		// Это игрок
-		public  var player: ObjectContainer3D;
+		// -----
+		private var containerLogin: ContainerLogin;
+		private var containerGame:  ContainerGame;
 		
+		// -----
+		private var game: Game;
+		
+		// -----
 		public function Main():void 
 		{
 			if (stage) init();
@@ -39,43 +47,55 @@ package ru.solverit
 		private function init(e:Event = null):void 
 		{
 			removeEventListener(Event.ADDED_TO_STAGE, init);
+			
 			// entry point
 			
-			// Создадим сцену
-			view = new View3D();
-			view.camera.y 		 	=  140;
-			view.camera.z 		 	= -120;
-			view.camera.rotationX 	=  50;
-			addChild(view);
+			//Контейнер с объектами
+			objectContainer = new Sprite();
+			objectContainer.mouseEnabled = false;
+			objectContainer.tabEnabled 	 = false;
+			addChild(objectContainer);
 			
-			// статистика 
-			addChild(new AwayStats(view)); 	
+			 //Контейнер для хинта
+			hintContainer = new Sprite();
+			hintContainer.mouseEnabled = false;
+			hintContainer.tabEnabled   = false;
+			addChild(hintContainer);
 			
-			// Добавим игрока на сцену
-			addPlayer();
+			 //Инициализация AlternativaGUIDefaultTheme
+			DefaultTheme.init();
 			
-			stage.addEventListener( Event.ENTER_FRAME, onEnterFrame );
+			 //Инициализация AlternativaGUI
+			GUI.init(stage, false);
+			
+			 //Инициализация LayoutManager 
+			LayoutManager.init(stage, [objectContainer]);
+			
+			 //Добавляем класс хинта в MouseManager
+			MouseManager.setHintImaging( hintContainer, new Hint() );
+			
+			 //Инициализация CursorManager. Передаем массив кастомных курсоров
+			CursorManager.init(Cursors.createCursors());
+			
+			 //Создаем и добавляем контейнер с эелементами
+			containerLogin = new ContainerLogin( this );
+			objectContainer.addChild( containerLogin );
 		}
 		
-		public function addPlayer():void 
+		public function goGame():void 
 		{
-			// создадим игрока
-			var load: PlayerLoad = new PlayerLoad( view, this );
-		}
-		
-		public function onEnterFrame( e:Event ):void 
-		{
-			// добавляем модели вращение
-			if ( player != null ) 
-			{
-				player.rotationX += .11;
-				player.rotationY += .15;
-				player.rotationZ += .19;	
-			}
+			objectContainer.removeChild( containerLogin );
 			
-			view.render();
+			containerGame = new ContainerGame( this );
+			objectContainer.addChild( containerGame );
 		}
 		
+		public function startGame():Sprite 
+		{
+			game = new Game( stage );
+			
+			return game;
+		}
 	}
 
 }

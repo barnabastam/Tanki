@@ -6,10 +6,15 @@ package away3d.core.render
 	import away3d.core.data.RenderableListItem;
 	import away3d.core.managers.Stage3DProxy;
 	import away3d.core.traverse.EntityCollector;
+	import away3d.lights.DirectionalLight;
+	import away3d.lights.LightBase;
+	import away3d.lights.PointLight;
 	import away3d.materials.MaterialBase;
 
 	import flash.display3D.Context3DBlendFactor;
 	import flash.display3D.Context3DCompareMode;
+	import flash.display3D.textures.TextureBase;
+	import flash.geom.Rectangle;
 
 	use namespace arcane;
 
@@ -19,7 +24,12 @@ package away3d.core.render
 	 */
 	public class DefaultRenderer extends RendererBase
 	{
+		private static var RTT_PASSES : int = 1;
+		private static var SCREEN_PASSES : int = 2;
+		private static var ALL_PASSES : int = 3;
 		private var _activeMaterial : MaterialBase;
+		private var _distanceRenderer : DepthRenderer;
+		private var _depthRenderer : DepthRenderer;
 
 		/**
 		 * Creates a new DefaultRenderer object.
@@ -29,33 +39,70 @@ package away3d.core.render
 		public function DefaultRenderer()
 		{
 			super();
+			_depthRenderer = new DepthRenderer();
+			_distanceRenderer = new DepthRenderer(false, true);
 		}
-
 
 		arcane override function set stage3DProxy(value : Stage3DProxy) : void
 		{
 			super.stage3DProxy = value;
+			_distanceRenderer.stage3DProxy = _depthRenderer.stage3DProxy = value;
+		}
+
+		protected override function executeRender(entityCollector : EntityCollector, target : TextureBase = null, scissorRect : Rectangle = null, surfaceSelector : int = 0) : void
+		{
+			updateLights(entityCollector);
+
+			// otherwise RTT will interfere with other RTTs
+			if (target) {
+				drawRenderables(entityCollector.opaqueRenderableHead, entityCollector, RTT_PASSES);
+				drawRenderables(entityCollector.blendedRenderableHead, entityCollector, RTT_PASSES);
+			}
+
+			super.executeRender(entityCollector, target, scissorRect, surfaceSelector);
+		}
+
+		private function updateLights(entityCollector : EntityCollector) : void
+		{
+			var dirLights : Vector.<DirectionalLight> = entityCollector.directionalLights;
+			var pointLights : Vector.<PointLight> = entityCollector.pointLights;
+			var len : uint, i : uint;
+			var light : LightBase;
+
+			len = dirLights.length;
+			for (i = 0; i < len; ++i) {
+				light = dirLights[i];
+				if (light.castsShadows)
+					light.shadowMapper.renderDepthMap(_stage3DProxy, entityCollector, _depthRenderer);
+			}
+
+			len = pointLights.length;
+			for (i = 0; i < len; ++i) {
+				light = pointLights[i];
+				if (light.castsShadows)
+					light.shadowMapper.renderDepthMap(_stage3DProxy, entityCollector, _distanceRenderer);
+			}
 		}
 
 		/**
 		 * @inheritDoc
 		 */
-		override protected function draw(entityCollector : EntityCollector) : void
+		override protected function draw(entityCollector : EntityCollector, target : TextureBase) : void
 		{
-			_context.setDepthTest(true, Context3DCompareMode.LESS);
-
-			_context.setBlendFactors(Context3DBlendFactor.ONE, Context3DBlendFactor.ZERO);
-			drawRenderables(entityCollector.opaqueRenderableHead, entityCollector);
-
-			_context.setDepthTest(false, Context3DCompareMode.LESS);
-
 			if (entityCollector.skyBox) {
 				if (_activeMaterial) _activeMaterial.deactivate(_stage3DProxy);
 				_activeMaterial = null;
 				drawSkyBox(entityCollector);
 			}
+			
+			_context.setDepthTest(true, Context3DCompareMode.LESS);
+			_context.setBlendFactors(Context3DBlendFactor.ONE, Context3DBlendFactor.ZERO);
+			
+			var which : int = target? SCREEN_PASSES : ALL_PASSES;
+			drawRenderables(entityCollector.opaqueRenderableHead, entityCollector, which);
+			drawRenderables(entityCollector.blendedRenderableHead, entityCollector, which);
 
-			drawRenderables(entityCollector.blendedRenderableHead, entityCollector);
+			_context.setDepthTest(false, Context3DCompareMode.LESS);
 
 			if (_activeMaterial) _activeMaterial.deactivate(_stage3DProxy);
 
@@ -72,8 +119,8 @@ package away3d.core.render
 			var material : MaterialBase = skyBox.material;
 			var camera : Camera3D = entityCollector.camera;
 
-			material.activatePass(0, _stage3DProxy, camera);
-			material.renderPass(0, skyBox, _stage3DProxy, camera);
+			material.activatePass(0, _stage3DProxy, camera, _textureRatioX, _textureRatioY);
+			material.renderPass(0, skyBox, _stage3DProxy, entityCollector);
 			material.deactivatePass(0, _stage3DProxy);
 		}
 
@@ -82,7 +129,7 @@ package away3d.core.render
 		 * @param renderables The renderables to draw.
 		 * @param entityCollector The EntityCollector containing all potentially visible information.
 		 */
-		private function drawRenderables(item : RenderableListItem, entityCollector : EntityCollector) : void
+		private function drawRenderables(item : RenderableListItem, entityCollector : EntityCollector, which : int) : void
 		{
 			var numPasses : uint;
 			var j : uint;
@@ -99,17 +146,34 @@ package away3d.core.render
 				do {
 					item2 = item;
 
-					_activeMaterial.activatePass(j, _stage3DProxy, camera);
-					do {
-						_activeMaterial.renderPass(j, item2.renderable, _stage3DProxy, camera);
+					var rttMask : int = _activeMaterial.passRendersToTexture(j)? 1 : 2;
+
+					if ((rttMask & which) != 0) {
+						_activeMaterial.activatePass(j, _stage3DProxy, camera, _textureRatioX, _textureRatioY);
+						do {
+							_activeMaterial.renderPass(j, item2.renderable, _stage3DProxy, entityCollector);
+							item2 = item2.next;
+						} while (item2 && item2.renderable.material == _activeMaterial);
+						_activeMaterial.deactivatePass(j, _stage3DProxy);
+					}
+					else do {
 						item2 = item2.next;
 					} while (item2 && item2.renderable.material == _activeMaterial);
-					_activeMaterial.deactivatePass(j, _stage3DProxy);
 
 				} while (++j < numPasses);
 
 				item = item2;
 			}
+		}
+
+
+		arcane override function dispose() : void
+		{
+			super.dispose();
+			_depthRenderer.dispose();
+			_distanceRenderer.dispose();
+			_depthRenderer = null;
+			_distanceRenderer = null;
 		}
 	}
 }

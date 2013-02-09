@@ -1,26 +1,33 @@
 package away3d.materials.methods
 {
 	import away3d.arcane;
-	import away3d.core.managers.BitmapDataTextureCache;
 	import away3d.core.managers.Stage3DProxy;
-	import away3d.core.managers.Texture3DProxy;
 	import away3d.materials.utils.ShaderRegisterCache;
 	import away3d.materials.utils.ShaderRegisterElement;
-
-	import flash.display.BitmapData;
+	import away3d.textures.Texture2DBase;
 
 	use namespace arcane;
 
 	public class BasicNormalMethod extends ShadingMethodBase
 	{
-		private var _texture : Texture3DProxy;
+		private var _texture : Texture2DBase;
 		private var _useTexture : Boolean;
-		protected var _normalMapIndex : int = -1;
 		protected var _normalTextureRegister : ShaderRegisterElement;
 
 		public function BasicNormalMethod()
 		{
-			super(false, false, false);
+			super();
+		}
+
+
+		override arcane function initVO(vo : MethodVO) : void
+		{
+			vo.needsUV = Boolean(_texture);
+		}
+
+		arcane function get tangentSpace() : Boolean
+		{
+			return true;
 		}
 
 		/**
@@ -36,32 +43,16 @@ package away3d.materials.methods
 			normalMap = BasicNormalMethod(method).normalMap;
 		}
 
-		arcane override function get needsUV() : Boolean
+		public function get normalMap() : Texture2DBase
 		{
-			return Boolean(_texture);
+			return _texture;
 		}
 
-		public function get normalMap() : BitmapData
+		public function set normalMap(value : Texture2DBase) : void
 		{
-			return _texture? _texture.bitmapData : null;
-		}
-
-		public function set normalMap(value : BitmapData) : void
-		{
-			if (value == normalMap) return;
-
-			if (!value || !_useTexture)
-				invalidateShaderProgram();
-
-			if (_useTexture) {
-				BitmapDataTextureCache.getInstance().freeTexture(_texture);
-				_texture = null;
-			}
-
+			if (!value || !_useTexture) invalidateShaderProgram();
 			_useTexture = Boolean(value);
-
-			if (_useTexture)
-				_texture = BitmapDataTextureCache.getInstance().getTexture(value);
+			_texture = value;
 		}
 
 		arcane override function cleanCompilationData() : void
@@ -70,29 +61,21 @@ package away3d.materials.methods
 			_normalTextureRegister = null;
 		}
 
-		arcane override function reset() : void
+		override public function dispose() : void
 		{
-			_normalMapIndex = -1;
+			if (_texture) _texture = null;
 		}
 
-		override public function dispose(deep : Boolean) : void
+		arcane override function activate(vo : MethodVO, stage3DProxy : Stage3DProxy) : void
 		{
-			if (_texture) {
-				BitmapDataTextureCache.getInstance().freeTexture(_texture);
-				_texture = null;
-			}
+			if (vo.texturesIndex >= 0) stage3DProxy.setTextureAt(vo.texturesIndex, _texture.getTextureForStage3D(stage3DProxy));
 		}
 
-		arcane override function activate(stage3DProxy : Stage3DProxy) : void
-		{
-			if (_normalMapIndex >= 0) stage3DProxy.setTextureAt(_normalMapIndex, _texture.getTextureForStage3D(stage3DProxy));
-		}
-
-		arcane override function getFragmentPostLightingCode(regCache : ShaderRegisterCache, targetReg : ShaderRegisterElement) : String
+		arcane function getFragmentCode(vo : MethodVO, regCache : ShaderRegisterCache, targetReg : ShaderRegisterElement) : String
 		{
 			_normalTextureRegister = regCache.getFreeTextureReg();
-			_normalMapIndex = _normalTextureRegister.index;
-			return getTexSampleCode(targetReg, _normalTextureRegister);
+			vo.texturesIndex = _normalTextureRegister.index;
+			return getTexSampleCode(vo,  targetReg, _normalTextureRegister);
 		}
 	}
 }

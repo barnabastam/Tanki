@@ -1,5 +1,7 @@
 package away3d.core.partition
 {
+	import flash.geom.Vector3D;
+	
 	import away3d.arcane;
 	import away3d.cameras.Camera3D;
 	import away3d.core.traverse.PartitionTraverser;
@@ -47,7 +49,7 @@ package away3d.core.partition
 				_debugPrimitive = createDebugBounds();
 			}
 			else {
-				_debugPrimitive.dispose(true);
+				_debugPrimitive.dispose();
 				_debugPrimitive = null;
 			}
 
@@ -80,7 +82,7 @@ package away3d.core.partition
 
 			// update numEntities in the tree
 			var numEntities : int = node._numEntities;
-			var node : NodeBase = this;
+			node = this;
 
 			do {
 				node._numEntities += numEntities;
@@ -103,7 +105,7 @@ package away3d.core.partition
 
 			// update numEntities in the tree
 			var numEntities : int = node._numEntities;
-			var node : NodeBase = this;
+			node = this;
 
 			do {
 				node._numEntities -= numEntities;
@@ -118,14 +120,33 @@ package away3d.core.partition
 		 */
 		public function isInFrustum(camera : Camera3D) : Boolean
 		{
+			// TODO: not used
+			camera = null; 
 			return true;
 		}
-
+		
+		/**
+		 * Tests if the current node is intersecting with a ray.
+		 * @param rayPosition The starting position of the ray
+		 * @param rayDirection The direction vector of the ray
+		 *
+		 * @return Whether or not the node is at least partly intersecting the ray.
+		 */
+		public function isIntersectingRay(rayPosition : Vector3D, rayDirection : Vector3D) : Boolean
+		{
+			// TODO: not used
+			rayPosition = null; 
+			rayDirection = null;
+			return true;
+		}
+		
 		/**
 		 * Finds the partition that contains (or should contain) the given entity.
 		 */
 		public function findPartitionForEntity(entity : Entity) : NodeBase
 		{
+			// TODO: not used
+			entity = null; 
 			return this;
 		}
 

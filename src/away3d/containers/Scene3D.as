@@ -5,7 +5,6 @@ package away3d.containers
 	import away3d.core.partition.Partition3D;
 	import away3d.core.traverse.PartitionTraverser;
 	import away3d.entities.Entity;
-	import away3d.events.MouseEvent3D;
 
 	import flash.events.EventDispatcher;
 
@@ -32,6 +31,7 @@ package away3d.containers
 			_partitions = new Vector.<Partition3D>();
 			_sceneGraphRoot = new ObjectContainer3D();
 			_sceneGraphRoot.scene = this;
+			_sceneGraphRoot._isRoot = true;
 			_sceneGraphRoot.partition = new Partition3D(new NodeBase());
 		}
 

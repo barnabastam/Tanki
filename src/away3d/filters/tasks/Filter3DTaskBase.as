@@ -36,6 +36,9 @@ package away3d.filters.tasks
 			_requireDepthRender = requireDepthRender;
 		}
 
+		/**
+		 * The texture scale for the input of this texture. This will define the output of the previous entry in the chain
+		 */
 		public function get textureScale() : int
 		{
 			return _textureScale;
@@ -108,15 +111,15 @@ package away3d.filters.tasks
 		{
 			if (_program3D) _program3D.dispose();
 			_program3D = stage.context3D.createProgram();
-			_program3D.upload(	new AGALMiniAssembler(Debug.active).assemble(Context3DProgramType.VERTEX, getVertexCode(), Debug.active),
-								new AGALMiniAssembler(Debug.active).assemble(Context3DProgramType.FRAGMENT, getFragmentCode(), Debug.active))
+			_program3D.upload(	new AGALMiniAssembler(Debug.active).assemble(Context3DProgramType.VERTEX, getVertexCode()),
+								new AGALMiniAssembler(Debug.active).assemble(Context3DProgramType.FRAGMENT, getFragmentCode()));
 			_program3DInvalid = false;
 		}
 
 		protected function getVertexCode() : String
 		{
 			return 	"mov op, va0\n"+
-					"mov v0, va1";
+					"mov v0, va1\n";
 		}
 
 		protected function getFragmentCode() : String

@@ -1,8 +1,7 @@
 package away3d.primitives
 {
-	import away3d.animators.data.AnimationBase;
-	import away3d.animators.data.AnimationStateBase;
-	import away3d.animators.data.NullAnimation;
+
+	import away3d.animators.IAnimator;
 	import away3d.arcane;
 	import away3d.bounds.NullBounds;
 	import away3d.cameras.Camera3D;
@@ -15,9 +14,8 @@ package away3d.primitives
 	import away3d.errors.AbstractMethodError;
 	import away3d.materials.MaterialBase;
 	import away3d.materials.SkyBoxMaterial;
-	import away3d.materials.utils.CubeMap;
+	import away3d.textures.CubeTextureBase;
 
-	import flash.display3D.Context3D;
 	import flash.display3D.IndexBuffer3D;
 	import flash.display3D.VertexBuffer3D;
 	import flash.geom.Matrix;
@@ -32,16 +30,22 @@ package away3d.primitives
 	 */
 	public class SkyBox extends Entity implements IRenderable
 	{
+		// todo: remove SubGeometry, use a simple single buffer with offsets
 		private var _geometry : SubGeometry;
 		private var _material : SkyBoxMaterial;
-		private var _nullAnimation : AnimationBase = new NullAnimation();
 		private var _uvTransform : Matrix = new Matrix();
-
+		private var _animator : IAnimator;
+		
+		public function get animator():IAnimator
+		{
+			return _animator;
+		}
+		
 		/**
 		 * Create a new SkyBox object.
 		 * @param cubeMap The CubeMap to use for the sky box's texture.
 		 */
-		public function SkyBox(cubeMap : CubeMap)
+		public function SkyBox(cubeMap : CubeTextureBase)
 		{
 			super();
 			_material = new SkyBoxMaterial(cubeMap);
@@ -49,14 +53,6 @@ package away3d.primitives
 			_geometry = new SubGeometry();
 			_bounds = new NullBounds();
 			buildGeometry(_geometry);
-		}
-
-		/**
-		 * Indicates whether the IRenderable should trigger mouse events, and hence should be rendered for hit testing.
-		 */
-		public function get mouseDetails() : Boolean
-		{
-			return false;
 		}
 
 		/**
@@ -139,24 +135,11 @@ package away3d.primitives
 		}
 
 		/**
-		 * The animation used by the material to assemble the vertex code.
-		 */
-		public function get animation() : AnimationBase
-		{
-			return _nullAnimation;
-		}
-
-		public function get animationState() : AnimationStateBase
-		{
-			return null;
-		}
-
-		/**
 		 * @inheritDoc
 		 */
 		override public function pushModelViewProjection(camera : Camera3D) : void
 		{
-			var size : Number = camera.lens.far / Math.sqrt(3);
+			var size : Number = camera.lens.far / Math.sqrt(2) * .5;
 			if (++_mvpIndex == _stackLen) {
 				_mvpTransformStack[_mvpIndex] = new Matrix3D();
 				++_stackLen;
@@ -166,7 +149,7 @@ package away3d.primitives
 			mvp.identity();
 			mvp.appendScale(size, size, size);
 			mvp.appendTranslation(camera.x, camera.y, camera.z);
-			mvp.append(camera.renderToTextureProjection);
+			mvp.append(camera.viewProjection);
 		}
 
 		/**
@@ -249,9 +232,50 @@ package away3d.primitives
 			return _uvTransform;
 		}
 
-		public function getSecondaryUVBuffer(stage3DProxy : Stage3DProxy) : VertexBuffer3D
+		public function getSecondaryUVBuffer( stage3DProxy:Stage3DProxy ):VertexBuffer3D {
+			return null;
+		}
+
+		public function getCustomBuffer(stage3DProxy : Stage3DProxy) : VertexBuffer3D
 		{
 			return null;
+		}
+
+		public function get vertexBufferOffset() : int
+		{
+			return 0;
+		}
+
+		public function get normalBufferOffset() : int
+		{
+			return 0;
+		}
+
+		public function get tangentBufferOffset() : int
+		{
+			return 0;
+		}
+
+		public function get UVBufferOffset() : int
+		{
+			return 0;
+		}
+
+		public function get secondaryUVBufferOffset() : int
+		{
+			return 0;
+		}
+
+		public function get vertexData():Vector.<Number> {
+			return _geometry.vertexData;
+		}
+
+		public function get indexData():Vector.<uint> {
+			return _geometry.indexData;
+		}
+
+		public function get UVData():Vector.<Number> {
+			return _geometry.UVData;
 		}
 	}
 }

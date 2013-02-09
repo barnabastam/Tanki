@@ -65,9 +65,9 @@ package away3d.filters
 		}
 
 		// link up the filters correctly with the next filter
-		public function setRenderTargets(target : Texture, stage3DProxy : Stage3DProxy) : void
+		public function setRenderTargets(mainTarget : Texture, stage3DProxy : Stage3DProxy) : void
 		{
-			_tasks[_tasks.length-1].target = target;
+			_tasks[_tasks.length-1].target = mainTarget;
 		}
 
 		public function dispose() : void

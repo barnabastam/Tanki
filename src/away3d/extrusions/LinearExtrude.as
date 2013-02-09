@@ -7,12 +7,12 @@
 	import away3d.core.base.data.UV;
 	import away3d.core.base.data.Vertex;
 	import away3d.entities.Mesh;
-	import away3d.loaders.parsers.data.DefaultBitmapData;
-	import away3d.materials.BitmapMaterial;
 	import away3d.materials.MaterialBase;
+	import away3d.materials.TextureMaterial;
 	import away3d.materials.utils.MultipleMaterials;
-	import away3d.tools.MeshHelper;
-
+	import away3d.textures.BitmapTexture;
+	import away3d.tools.helpers.MeshHelper;
+	
 	import flash.geom.Point;
 	import flash.geom.Vector3D;
 
@@ -22,7 +22,7 @@
 		public static const Y_AXIS:String = "y";
 		public static const Z_AXIS:String = "z";
 		
-		private const LIMIT:uint = 64998;
+		private const LIMIT:uint = 196605;
 		private const EPS:Number = .0001;
 		
 		private var _varr:Vector.<Vertex>;
@@ -48,10 +48,11 @@
 		private var _uvb:UV;
 		private var _uvc:UV;
 		private var _uvd:UV;
-		private var _va:Vertex;
-		private var _vb:Vertex;
-		private var _vc:Vertex;
-		private var _vd:Vertex;
+		// TODO: not used
+		// private var _va:Vertex;
+		// private var _vb:Vertex;
+		// private var _vc:Vertex;
+		// private var _vd:Vertex;
 		private var _maxIndProfile:uint;
 		private var _uvs : Vector.<Number>;
 		private var _vertices : Vector.<Number>;
@@ -86,7 +87,7 @@
 			_subGeometry = new SubGeometry();
 			
 			if(!material && materials && materials.front) material = materials.front;
-			super((!material)? new BitmapMaterial(DefaultBitmapData.bitmapData) : material, geom);
+			super(geom, material);
 			
 			_aVectors = vectors;
 			_axis = axis;
@@ -332,7 +333,8 @@
 			var subGeom:SubGeometry;
 			var uvs:Vector.<Number>;
 			var vertices:Vector.<Number>;
-			var normals:Vector.<Number>;
+			// TODO: not used
+			// var normals:Vector.<Number>;
 			var indices:Vector.<uint>;
 			var sglist:SubGeometryList;
 			
@@ -757,7 +759,7 @@
 					_uva.v = v1;
 					_uvb.u = u1;
 					_uvb.v = v2;
-					_uvc.u = u2
+					_uvc.u = u2;
 					_uvc.v = v2;
 					_uvd.u = u2;
 					_uvd.v = v1;

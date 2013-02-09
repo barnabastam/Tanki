@@ -11,7 +11,7 @@ package away3d.extrusions
 	import away3d.core.base.data.UV;
 	import away3d.entities.Mesh;
 	import away3d.materials.MaterialBase;
-	import away3d.tools.MeshHelper;
+	import away3d.tools.helpers.MeshHelper;
 
 	import flash.geom.Vector3D;
 
@@ -21,7 +21,7 @@ package away3d.extrusions
 		public static const PLANE_XY:String = "xy";
 		public static const PLANE_ZY:String = "zy";
 		
-		private const LIMIT:uint = 64998;
+		private const LIMIT:uint = 196605;
 		private const EPS:Number = .0001;
 		private const MAXRAD:Number = 1.2;
 		
@@ -66,7 +66,7 @@ package away3d.extrusions
 		 	var geom:Geometry = new Geometry();
 			_subGeometry = new SubGeometry();
 			geom.addSubGeometry(_subGeometry);
-			super(material, geom);
+			super(geom, material);
 			 
 			_vectors = vectors;
 			_centerMesh = centerMesh;
@@ -409,8 +409,10 @@ package away3d.extrusions
 				var y2:Number;
 				var x3:Number;
 				var y3:Number;
-				var xc:Number;
-				var yc:Number;
+				// TODO: not used
+				// var xc:Number;
+				// TODO: not used
+				// var yc:Number;
 				
 				var sortMin:Number;
 				var sortMax:Number;

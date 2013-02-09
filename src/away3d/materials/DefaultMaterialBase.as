@@ -1,15 +1,17 @@
 ﻿package away3d.materials
 {
 	import away3d.arcane;
-	import away3d.lights.LightBase;
+	import away3d.cameras.Camera3D;
+	import away3d.core.managers.Stage3DProxy;
 	import away3d.materials.methods.BasicAmbientMethod;
 	import away3d.materials.methods.BasicDiffuseMethod;
 	import away3d.materials.methods.BasicNormalMethod;
 	import away3d.materials.methods.BasicSpecularMethod;
-	import away3d.materials.methods.ShadingMethodBase;
+	import away3d.materials.methods.EffectMethodBase;
+	import away3d.materials.methods.ShadowMapMethodBase;
 	import away3d.materials.passes.DefaultScreenPass;
+	import away3d.textures.Texture2DBase;
 
-	import flash.display.BitmapData;
 	import flash.display3D.Context3D;
 	import flash.geom.ColorTransform;
 
@@ -22,6 +24,7 @@
 	public class DefaultMaterialBase extends MaterialBase
 	{
 		protected var _screenPass : DefaultScreenPass;
+		private var _alphaBlending : Boolean;
 
 		/**
 		 * Creates a new DefaultMaterialBase object.
@@ -30,13 +33,6 @@
 		{
 			super();
 			addPass(_screenPass = new DefaultScreenPass(this));
-		}
-
-
-		override public function set lights(value : Array) : void
-		{
-			super.lights = value;
-			_screenPass.lights = value? Vector.<LightBase>(value) : null;
 		}
 
 		/**
@@ -52,6 +48,39 @@
 		public function set alphaThreshold(value : Number) : void
 		{
 			_screenPass.diffuseMethod.alphaThreshold = value;
+			_depthPass.alphaThreshold = value;
+			_distancePass.alphaThreshold = value;
+		}
+
+		arcane override function activateForDepth(stage3DProxy : Stage3DProxy, camera : Camera3D, distanceBased : Boolean = false, textureRatioX : Number = 1, textureRatioY : Number = 1) : void
+		{
+			if (distanceBased) {
+				_distancePass.alphaMask = _screenPass.diffuseMethod.texture;
+			}
+			else {
+				_depthPass.alphaMask = _screenPass.diffuseMethod.texture;
+			}
+			super.activateForDepth(stage3DProxy, camera, distanceBased, textureRatioX, textureRatioY);
+		}
+
+		public function get specularLightSources() : uint
+		{
+			return _screenPass.specularLightSources;
+		}
+
+		public function set specularLightSources(value : uint) : void
+		{
+			_screenPass.specularLightSources = value;
+		}
+
+		public function get diffuseLightSources() : uint
+		{
+			return _screenPass.diffuseLightSources;
+		}
+
+		public function set diffuseLightSources(value : uint) : void
+		{
+			_screenPass.diffuseLightSources = value;
 		}
 
 		/**
@@ -72,11 +101,12 @@
 		 */
 		override public function get requiresBlending() : Boolean
 		{
-			return super.requiresBlending || (_screenPass.colorTransform && _screenPass.colorTransform.alphaMultiplier < 1);
+			return super.requiresBlending || _alphaBlending || (_screenPass.colorTransform && _screenPass.colorTransform.alphaMultiplier < 1);
 		}
 
 		/**
-		 * The method to perform diffuse shading.
+		 * The method to perform ambient shading. Note that shading methods cannot
+		 * be reused across materials.
 		 */
 		public function get ambientMethod() : BasicAmbientMethod
 		{
@@ -89,20 +119,22 @@
 		}
 
 		/**
-		 * The method to perform diffuse shading.
+		 * The method to render shadows cast on this surface. Note that shading methods can not
+		 * be reused across materials.
 		 */
-		public function get shadowMethod() : ShadingMethodBase
+		public function get shadowMethod() : ShadowMapMethodBase
 		{
 			return _screenPass.shadowMethod;
 		}
 
-		public function set shadowMethod(value : ShadingMethodBase) : void
+		public function set shadowMethod(value : ShadowMapMethodBase) : void
 		{
 			_screenPass.shadowMethod = value;
 		}
 
 		/**
-		 * The method to perform diffuse shading.
+		 * The method to perform diffuse shading. Note that shading methods can not
+		 * be reused across materials.
 		 */
 		public function get diffuseMethod() : BasicDiffuseMethod
 		{
@@ -115,7 +147,8 @@
 		}
 
 		/**
-		 * The method to generate the (tangent-space) normal
+		 * The method to generate the (tangent-space) normal. Note that shading methods can not
+		 * be reused across materials.
 		 */
 		public function get normalMethod() : BasicNormalMethod
 		{
@@ -128,7 +161,8 @@
 		}
 
 		/**
-		 * The method to perform specular shading.
+		 * The method to perform specular shading. Note that shading methods can not
+		 * be reused across materials.
 		 */
 		public function get specularMethod() : BasicSpecularMethod
 		{
@@ -139,8 +173,12 @@
 		{
 			_screenPass.specularMethod = value;
 		}
-
-		public function addMethod(method : ShadingMethodBase) : void
+		
+ 		/**
+		 * Adds a shading method to the end of the shader. Note that shading methods can
+		 * not be reused across materials.
+		*/
+		public function addMethod(method : EffectMethodBase) : void
 		{
 			_screenPass.addMethod(method);
 		}
@@ -150,22 +188,27 @@
 			return _screenPass.numMethods;
 		}
 
-		public function hasMethod(method : ShadingMethodBase) : Boolean
+		public function hasMethod(method : EffectMethodBase) : Boolean
 		{
 			return _screenPass.hasMethod(method);
 		}
 
-		public function getMethodAt(index : int) : ShadingMethodBase
+		public function getMethodAt(index : int) : EffectMethodBase
 		{
 			return _screenPass.getMethodAt(index);
 		}
 
-		public function addMethodAt(method : ShadingMethodBase, index : int) : void
+		/**
+		 * Adds a shading method to the end of a shader, at the specified index amongst
+		 * the methods in that section of the shader. Note that shading methods can not
+		 * be reused across materials.
+		*/
+		public function addMethodAt(method : EffectMethodBase, index : int) : void
 		{
 			_screenPass.addMethodAt(method, index);
 		}
 
-		public function removeMethod(method : ShadingMethodBase) : void
+		public function removeMethod(method : EffectMethodBase) : void
 		{
 			_screenPass.removeMethod(method);
 		}
@@ -182,46 +225,30 @@
 		/**
 		 * The tangent space normal map to influence the direction of the surface for each texel.
 		 */
-		public function get normalMap() : BitmapData
+		public function get normalMap() : Texture2DBase
 		{
 			return _screenPass.normalMap;
 		}
 
-		public function set normalMap(value : BitmapData) : void
+		public function set normalMap(value : Texture2DBase) : void
 		{
 			_screenPass.normalMap = value;
 		}
 
 		/**
-		 * A specular map that defines the strength of specular reflections for each texel.
+		 * A specular map that defines the strength of specular reflections for each texel in the red channel, and the gloss factor in the green channel.
+		 * You can use SpecularBitmapTexture if you want to easily set specular and gloss maps from greyscale images, but prepared images are preffered.
 		 */
-		public function get specularMap() : BitmapData
+		public function get specularMap() : Texture2DBase
 		{
-			return _screenPass.specularMethod? _screenPass.specularMethod.specularMap : null;
+			return _screenPass.specularMethod.texture;
 		}
 
-		public function set specularMap(value : BitmapData) : void
+		public function set specularMap(value : Texture2DBase) : void
 		{
-			if (_screenPass.specularMethod) _screenPass.specularMethod.specularMap = value;
+			if (_screenPass.specularMethod) _screenPass.specularMethod.texture = value;
+			else throw new Error("No specular method was set to assign the specularGlossMap to");
 		}
-
-		/**
-		 * A specular map that defines the power of specular reflections for each texel.
-		 */
-		public function get glossMap() : BitmapData
-		{
-			return _screenPass.specularMethod? _screenPass.specularMethod.glossMap : null;
-		}
-
-		public function set glossMap(value : BitmapData) : void
-		{
-			if (_screenPass.specularMethod) _screenPass.specularMethod.glossMap = value;
-		}
-
-//		override public function dispose(deep : Boolean) : void
-//		{
-//			super.dispose(deep);
-//		}
 
 		/**
 		 * The sharpness of the specular highlight.
@@ -286,6 +313,20 @@
 		public function set specularColor(value : uint) : void
 		{
 			_screenPass.specularMethod.specularColor = value;
+		}
+
+		/**
+		 * Indicate whether or not the material has transparency. If binary transparency is sufficient, for
+		 * example when using textures of foliage, consider using alphaThreshold instead.
+		 */
+		public function get alphaBlending() : Boolean
+		{
+			return _alphaBlending;
+		}
+
+		public function set alphaBlending(value : Boolean) : void
+		{
+			_alphaBlending = value;
 		}
 
 		/**
