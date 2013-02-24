@@ -40,7 +40,7 @@ package ru.solverit
 		
 		public function init():void
 		{
-
+			
 		}
 		
 		private function connectionFailed():void
@@ -72,7 +72,7 @@ package ru.solverit
 		}
 		
 		//Пришли данные от сервера
-		private function onSocketData(e:DataEvent):void 
+		private function onSocketData(e:ProgressEvent):void 
 		{
 			// Здесь будем обрабатывать команды
 			try
@@ -123,12 +123,17 @@ package ru.solverit
 		//Подключаемся к серверу
 		public function connect( login: String ):void 
 		{
+			trace( "Try to connect" );
+			
+			Manager.initNet();
+			
 			socket.connect(host, port);
 		}
 		
 		//Отправляем сообщение
 		public function sendMessage(data:ByteArray):void 
 		{
+			socket.writeInt(data.length);
 			socket.writeBytes(data);
 			socket.flush();
 		}

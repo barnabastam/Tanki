@@ -50,6 +50,8 @@ package ru.solverit
 			
 			// entry point
 			
+			Manager.main = this;
+			
 			//Контейнер с объектами
 			objectContainer = new Sprite();
 			objectContainer.mouseEnabled = false;

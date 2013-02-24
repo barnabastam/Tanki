@@ -20,6 +20,7 @@ import alternativa.gui.base.GUIobject;
 	import flash.events.MouseEvent;
 	
 	import ru.solverit.Main;
+	import ru.solverit.Manager;
 	import ru.solverit.Connection;
 	
 	/**
@@ -70,12 +71,7 @@ import alternativa.gui.base.GUIobject;
 		
 		private function button_clickHandler( event:MouseEvent ):void 
 		{
-			var conn: Connection = new Connection();
-			conn.connect( textLogin.text );
-			
-			main.goGame();
-			
-			//NetHelper.main = main;
+			Manager.conn.connect( textLogin.text );
 		}
 	}
 
